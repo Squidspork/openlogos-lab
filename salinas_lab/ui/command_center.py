@@ -43,10 +43,16 @@ class CommandCenter:
             mode = self._next_mode(mode)
             event.app.invalidate()
 
+        @bindings.add("c-t")
+        def _(event) -> None:
+            nonlocal mode
+            mode = self._next_mode(mode)
+            event.app.invalidate()
+
         session: PromptSession[str] = PromptSession(key_bindings=bindings)
         self.console.print(self._intro_panel())
         self.console.print(
-            "[bright_black]Shift+Tab cycles modes. /chat, /research, /help, /quit also work.[/bright_black]\n"
+            "[bright_black]Shift+Tab or Ctrl+T cycles modes. /mode, /chat, /research, /help, /quit also work.[/bright_black]\n"
         )
 
         while True:
@@ -72,6 +78,10 @@ class CommandCenter:
                 return
             if command == "/help":
                 self.console.print(self._help_panel())
+                continue
+            if command == "/mode":
+                mode = self._next_mode(mode)
+                self.console.print(f"[cyan]Mode switched to:[/cyan] {mode.value}")
                 continue
             if command == "/departments":
                 self.console.print(self._departments_panel(chat))
@@ -162,7 +172,7 @@ class CommandCenter:
 
         other = "research" if mode == InteractionMode.CHAT else "chat"
         return HTML(
-            f" <b>Mode:</b> {mode.value} | Shift+Tab: switch to {other} | "
+            f" <b>Mode:</b> {mode.value} | Shift+Tab/Ctrl+T//mode: switch to {other} | "
             "/chat /research this /brief /memory /help /quit "
         )
 
@@ -187,7 +197,9 @@ class CommandCenter:
                     "Research mode: full pipeline, audit log, labeled output folder, final report.",
                     "Memory: chat and research both read relevant Lab memory and write passive observations.",
                     "Self-learning: use `openlogos-lab memory reflect` to promote durable observations.",
-                    "Shift+Tab: cycle modes.",
+                    "Shift+Tab: cycle modes when supported by your terminal.",
+                    "Ctrl+T: cycle modes fallback.",
+                    "/mode: cycle modes command fallback.",
                     "/chat: switch to chat mode.",
                     "/research: switch to research mode.",
                     "/research this: send the last chat topic into research mode.",
