@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from salinas_lab.graph.state import DepartmentName, LabState, ReportArtifact
-from salinas_lab.models import ModelClient, ModelRouter, ModelTier
+from salinas_lab.models import ModelClient, ModelClientError, ModelRouter, ModelTier
 
 
 class ReportWriter:
@@ -29,30 +29,55 @@ class ReportWriter:
             for key, finding in state.department_findings.items()
             if key != DepartmentName.PUBLICATIONS
         )
-        response = self.client.chat(
-            model=self.model,
-            system=(
-                "You are the Department of Publications and Findings at OpenLogos Lab. "
-                "Write a research-paper-style Markdown report with scientific seriousness, "
-                "accountable uncertainty, and light institutional humor. Include these sections: "
-                "Title, Abstract, Original Question, Executive Summary, Research Questions, "
-                "Use-Case Landscape, Technical and Scientific Analysis, Business and Product "
-                "Analysis, Proposed Experiments and Test Subjects, Risk and Ethics Review, "
-                "Recommendations, Open Questions, Sources and Evidence Log, Appendix."
-            ),
-            user=(
-                f"Original request: {state.request.prompt}\n"
-                f"Audience: {state.request.audience}\n\n"
-                f"Department findings:\n{department_digest}"
-            ),
-            temperature=0.4,
-            max_tokens=5000,
-        )
+        try:
+            response = self.client.chat(
+                model=self.model,
+                system=(
+                    "You are the Department of Publications and Findings at OpenLogos Lab. "
+                    "Write a research-paper-style Markdown report with scientific seriousness, "
+                    "accountable uncertainty, and light institutional humor. Include these sections: "
+                    "Title, Abstract, Original Question, Executive Summary, Research Questions, "
+                    "Use-Case Landscape, Technical and Scientific Analysis, Business and Product "
+                    "Analysis, Proposed Experiments and Test Subjects, Risk and Ethics Review, "
+                    "Recommendations, Open Questions, Sources and Evidence Log, Appendix."
+                ),
+                user=(
+                    f"Original request: {state.request.prompt}\n"
+                    f"Audience: {state.request.audience}\n\n"
+                    f"Department findings:\n{department_digest}"
+                ),
+                temperature=0.4,
+                max_tokens=5000,
+            )
+        except ModelClientError as exc:
+            response = self._fallback_report(state, department_digest, str(exc))
         markdown = self._ensure_report_shape(state, response)
         return ReportArtifact(
             title=self._title_from_markdown(markdown),
             abstract=self._abstract_from_markdown(markdown),
             markdown=markdown,
+        )
+
+    @staticmethod
+    def _fallback_report(state: LabState, department_digest: str, reason: str) -> str:
+        return (
+            f"# OpenLogos Lab Findings: {state.request.prompt[:80]}\n\n"
+            "## Abstract\n\n"
+            "The Publications model was unavailable, so this report was assembled from the "
+            "department records already produced by the pipeline.\n\n"
+            "## Original Question\n\n"
+            f"{state.request.prompt}\n\n"
+            "## Executive Summary\n\n"
+            "Some departments may be marked unavailable. Review their individual files and "
+            "`audit.jsonl` before treating this as a complete research result.\n\n"
+            "## Department Findings\n\n"
+            f"{department_digest or 'No department findings were produced.'}\n\n"
+            "## Publication Model Status\n\n"
+            f"{reason}\n\n"
+            "## Recommendations\n\n"
+            "- Run `openlogos-lab doctor --live` to check configured models.\n"
+            "- Retry the request after replacing or restarting unavailable models.\n"
+            "- Treat this fallback report as an operational record, not a final research paper.\n"
         )
 
     @staticmethod

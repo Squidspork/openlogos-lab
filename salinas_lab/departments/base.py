@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from salinas_lab.graph.state import DepartmentFinding, DepartmentName, EvidenceItem, LabState
-from salinas_lab.models import ModelClient, ModelRouter, ModelTier
+from salinas_lab.models import ModelClient, ModelClientError, ModelRouter, ModelTier
 
 
 @dataclass(frozen=True)
@@ -32,12 +32,15 @@ class DepartmentAgent:
         return self.router.model_for(self.spec.model_tier)
 
     def run(self, state: LabState) -> DepartmentFinding:
-        response = self.client.chat(
-            model=self.model,
-            system=self._system_prompt(),
-            user=self._user_prompt(state),
-            temperature=0.35,
-        )
+        try:
+            response = self.client.chat(
+                model=self.model,
+                system=self._system_prompt(),
+                user=self._user_prompt(state),
+                temperature=0.35,
+            )
+        except ModelClientError as exc:
+            return self._unavailable_finding(str(exc))
         return self._finding_from_text(response)
 
     def _system_prompt(self) -> str:
@@ -93,6 +96,27 @@ class DepartmentAgent:
                 )
             ],
             confidence=0.55,
+            model=self.model,
+        )
+
+    def _unavailable_finding(self, reason: str) -> DepartmentFinding:
+        summary = f"{self.spec.actor} unavailable: {reason}"
+        return DepartmentFinding(
+            department=self.spec.department,
+            actor=self.spec.actor,
+            summary=summary,
+            findings=[],
+            assumptions=["No department analysis was produced because the assigned model failed."],
+            risks=[summary],
+            recommendations=["Retry after checking model health or switch this department's model."],
+            evidence=[
+                EvidenceItem(
+                    title=f"{self.spec.actor} model unavailable",
+                    note=reason,
+                    confidence=0.0,
+                )
+            ],
+            confidence=0.0,
             model=self.model,
         )
 
